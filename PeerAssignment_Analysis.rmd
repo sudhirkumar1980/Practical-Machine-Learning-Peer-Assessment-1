@@ -1,0 +1,121 @@
+---
+title: "Practical Machine Learning Coursera Peer Assessment"
+output: html_document
+date: "Feb 22 2018"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+This report uses machine learning algorithms to predict the manner in which users of exercise devices exercise. 
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Loading Required Libraries
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ElemStatLearn)
+library(rpart)
+library(RCurl)
+library(caret)
+library(randomForest)
+```
+
+
+## Loading Data
+
+```{r loadingData, cache=TRUE}
+training_link <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(training_link,destfile = "pml-training.csv")
+training_data <- read.csv(file ="pml-training.csv" ,sep=",", header = TRUE, na.strings = c("NA", ""))
+```
+
+## Processing Data
+```{r processingData}
+# Remove first ID column
+training_data <- training_data[,-1]
+```
+
+## Training , Validation and Testing Datasets
+Create Training, Validation and Testing datasets
+
+```{r, cache=TRUE}
+inTrain = createDataPartition(training_data$classe, p=0.60, list = FALSE)
+training <- training_data[inTrain,]
+validation <- training_data[-inTrain,]
+dim(training)
+dim(validation)
+````
+
+## Data Cleaning
+Remove columns which has less than 60% data to avoid issue with machine learning.
+```{r, cache=TRUE}
+# Number of columns with less than 60% of data
+sum((colSums(!is.na(training[,-ncol(training)])) < 0.6*nrow(training))) 
+
+Keep <- c((colSums(!is.na(training[,-ncol(training)])) >= 0.6*nrow(training)))
+training   <-  training[,Keep]
+validation <- validation[,Keep]
+
+dim(training)
+dim(validation)
+```
+
+## Random Forest Model
+Fit a Random Forest Model and check model performance on validation dataset.
+
+```{r rf_apply}
+# fit Random Forest Model
+set.seed(1234)
+rfModel <- randomForest(classe~.,data=training)
+print(rfModel)
+
+# Predict on validation dataset.
+validation_pred <- predict(rfModel, newdata=validation)
+```
+
+## Evaluate Model
+Validaiton of vairable importance using model produced by random forest.
+```{r rf_evaluation}
+# Model performance using Confusion Matrix
+confusionMatrix(validation_pred, validation$classe)
+importance(rfModel)
+```
+
+## Final Testing
+Final step is to use the random forest model to predict on testing dataset.
+```{r rf_testing}
+testing_link <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testing_link, destfile = "pml-testing.csv")
+testing_data <- read.csv(file = "pml-testing.csv", sep=",", header = TRUE, na.strings = c("NA", ""))
+testing_data <- testing_data[,-1] #remove ID column
+testing_data <- testing_data[,Keep]
+testing_data = testing_data[,-ncol(testing_data)] # remove problem ID column
+testing <- rbind(training[100, -59] , testing_data)
+row.names(testing) <- c(100, 1:20)
+testing_pred <- predict(rfModel,newdata=testing[-1,])
+print(testing_pred)
+
+write_files <- function(x) {
+        n <- length(x)
+        for (i in 1:n) {
+                filename <- paste0("answers/problem_id", i, ".txt")
+                write.table(x[i], file=filename, quote=FALSE, row.names=FALSE,col.names=FALSE)
+        }
+}
+write_files(testing_pred)
+
+```
